@@ -1,14 +1,18 @@
-import asyncio
+from pprint import pprint
+
+from decimal import Decimal
+
 import urllib.parse
 import uuid
-from dataclasses import dataclass, field
+from aiohttp import ClientSession, BasicAuth
 from typing import Optional, Union, Dict, Any, TypedDict, cast
 
-from aiohttp import ClientSession, BasicAuth
-
+from przelewy24.blikresponse import BLIKResponse
 from przelewy24.channels import Channels
 from przelewy24.errors import P24NotAuthorizedError, P24BadRequestError
-from przelewy24.transaction import Transaction
+from przelewy24.offlineresponse import OfflineResponse
+from przelewy24.transactiondataresponse import TransactionDataResponse
+from przelewy24.transactioncreateresponse import TransactionCreateResponse
 from przelewy24.utils import get_sha384_hash
 
 PRODUCTION_URL: str = "https://secure.przelewy24.pl/"
@@ -34,23 +38,12 @@ class TransactionArgs(TypedDict, total=False):
     additional: Dict[str, Any]
 
 
-@dataclass
-class BLIKResponse:
-    success: bool
-    message: str
-    error_code: Optional[int] = None
-    order_id: Optional[int] = None
+class NULL:
+    pass
 
 
-@dataclass
-class OfflineResponse:
-    order_id: int
-    session_id: str
-    amount: int
-    statement: str
-    iban: str
-    iban_owner: str
-    iban_owner_address: str
+def fill_null(**kwargs) -> Dict[str, Any]:
+    return {k: v for k, v in kwargs.items() if v is not NULL}
 
 
 class P24:
@@ -82,9 +75,10 @@ class P24:
     async def close(self):
         await self.session.close()
 
-    async def register_transaction(
+    # noinspection PyShadowingBuiltins
+    async def create_transaction(
         self,
-        amount: int,
+        amount: Union[Decimal, int],
         currency: str,
         *,
         description: str,
@@ -94,13 +88,42 @@ class P24:
         return_url: Optional[str] = None,
         session_id: Optional[str] = None,
         data: Optional[TransactionArgs] = None,
-    ) -> Transaction:
+        client: str = NULL,
+        address: str = NULL,
+        zip: str = NULL,
+        city: str = NULL,
+        phone: str = NULL,
+        method: int = NULL,
+        url_status: str = NULL,
+        time_limit: int = NULL,
+        channel: Union[Channels, int] = NULL,
+        wait_for_result: bool = NULL,
+        regulation_accept: bool = NULL,
+        shipping: int = NULL,
+        transfer_label: str = NULL,
+        cart: Dict[str, Any] = NULL,
+        method_ref_id: str = NULL,
+        additional: Dict[str, Any] = NULL,
+    ) -> TransactionCreateResponse:
         if data is None:
             data = TransactionArgs()
         elif data.get("channel"):
             data["channel"] = int(data["channel"])
 
         session_id = session_id or uuid.uuid4().hex
+
+        if isinstance(amount, Decimal):
+            amount = int(amount * 100)
+
+        sign = get_sha384_hash(
+            {
+                "sessionId": session_id,
+                "merchantId": self.merchant_id,
+                "amount": amount,
+                "currency": currency,
+                "crc": self.crc,
+            }
+        )
 
         json_data = {
             "merchantId": self.merchant_id,
@@ -113,14 +136,24 @@ class P24:
             "email": email,
             "country": country,
             "language": language,
-            "sign": get_sha384_hash(
-                {
-                    "sessionId": session_id,
-                    "merchantId": self.merchant_id,
-                    "amount": amount,
-                    "currency": currency,
-                    "crc": self.crc,
-                }
+            "sign": sign,
+            **fill_null(
+                client=client,
+                address=address,
+                zip=zip,
+                city=city,
+                phone=phone,
+                method=method,
+                urlStatus=url_status,
+                timeLimit=time_limit,
+                channel=channel,
+                waitForResult=wait_for_result,
+                regulationAccept=regulation_accept,
+                shipping=shipping,
+                transferLabel=transfer_label,
+                cart=cart,
+                methodRefId=method_ref_id,
+                additional=additional,
             ),
         }
         json_data.update(data)
@@ -131,15 +164,57 @@ class P24:
         )
 
         if req.status == 400:
-            raise P24BadRequestError.from_request(req)
+            js = await req.json()
+            raise P24BadRequestError.from_request(req, js)
 
         if req.status == 401:
-            raise P24NotAuthorizedError.from_request(req)
+            js = await req.json()
+            raise P24NotAuthorizedError.from_request(req, js)
 
         js = await req.json()
-        return Transaction(self, js["data"]["token"], session_id)
+        return TransactionCreateResponse(
+            token=js["data"]["token"], session_id=session_id, sign=sign, _base=self
+        )
 
-    async def blik_charge_by_code(
+    async def verify_transaction(
+        self, amount: int, currency: str, *, session_id: str, order_id: int
+    ):
+        sign = get_sha384_hash(
+            {
+                "sessionId": session_id,
+                "orderId": order_id,
+                "amount": amount,
+                "currency": currency,
+                "crc": self.crc,
+            }
+        )
+
+        json_data = {
+            "merchantId": self.merchant_id,
+            "posId": self.pos_id,
+            "sessionId": session_id,
+            "amount": amount,
+            "currency": currency,
+            "orderId": order_id,
+            "sign": sign,
+        }
+
+        req = await self.session.put(
+            self.base_url + "api/v1/transaction/verify",
+            json=json_data,
+        )
+
+        if req.status == 400:
+            js = await req.json()
+            raise P24BadRequestError.from_request(req, js)
+
+        if req.status == 401:
+            js = await req.json()
+            raise P24NotAuthorizedError.from_request(req, js)
+
+        return await req.json()
+
+    async def charge_blik_by_code(
         self,
         token: str,
         blik_code: str,
@@ -150,7 +225,7 @@ class P24:
     ) -> BLIKResponse:
         json_data = {
             "token": token,
-            "blikCode": blik_code,
+            "blikCode": blik_code.replace(" ", "").replace("\n", ""),
         }
         if alias_value is not None:
             json_data["aliasValue"] = alias_value
@@ -167,10 +242,12 @@ class P24:
         )
 
         if req.status == 500:
-            raise P24BadRequestError.from_request(req)
+            js = await req.json()
+            raise P24BadRequestError.from_request(req, js)
 
         if req.status == 401:
-            raise P24NotAuthorizedError.from_request(req)
+            js = await req.json()
+            raise P24NotAuthorizedError.from_request(req, js)
 
         js = await req.json()
         if "error" in js:
@@ -178,7 +255,9 @@ class P24:
 
         return BLIKResponse(True, js["data"]["message"], order_id=js["data"]["orderId"])
 
-    async def fetch_transaction_data(self, session_id: str) -> Optional[Dict[str, Any]]:
+    async def fetch_transaction_data(
+        self, session_id: str
+    ) -> Optional[TransactionDataResponse]:
         req = await self.session.get(
             self.base_url
             + "api/v1/transaction/by/sessionId/"
@@ -186,16 +265,40 @@ class P24:
         )
 
         if req.status == 400:
-            raise P24BadRequestError.from_request(req)
+            js = await req.json()
+            raise P24BadRequestError.from_request(req, js)
 
         if req.status == 401:
-            raise P24NotAuthorizedError.from_request(req)
+            js = await req.json()
+            raise P24NotAuthorizedError.from_request(req, js)
 
         if req.status == 404:
             return None
 
         js = await req.json()
-        return cast(Dict[str, Any], js["data"])
+
+        data = js["data"]
+        return TransactionDataResponse(
+            statement=data.get("statement", ""),
+            order_id=data.get("orderId", 0),
+            session_id=data.get("sessionId", ""),
+            status=data.get("status", 0),
+            amount=data.get("amount", 0),
+            currency=data.get("currency", ""),
+            date=data.get("date", ""),
+            date_of_transaction=data.get("dateOfTransaction", ""),
+            client_email=data.get("clientEmail", ""),
+            account_md5=data.get("accountMD5", ""),
+            payment_method=data.get("paymentMethod", 0),
+            description=data.get("description", ""),
+            client_name=data.get("clientName", ""),
+            client_address=data.get("clientAddress", ""),
+            client_city=data.get("clientCity", ""),
+            client_postcode=data.get("clientPostcode", ""),
+            batch_id=data.get("batchId", 0),
+            fee=data.get("fee", ""),
+            _base=self,
+        )
 
     async def register_transaction_offline(self, token: str) -> OfflineResponse:
         req = await self.session.post(
@@ -204,10 +307,12 @@ class P24:
         )
 
         if req.status == (400, 500):
-            raise P24BadRequestError.from_request(req)
+            js = await req.json()
+            raise P24BadRequestError.from_request(req, js)
 
         if req.status in (401, 409):
-            raise P24NotAuthorizedError.from_request(req)
+            js = await req.json()
+            raise P24NotAuthorizedError.from_request(req, js)
 
         js = await req.json()
         data = js["data"]

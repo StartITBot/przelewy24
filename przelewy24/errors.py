@@ -6,14 +6,28 @@ class P24Error(Exception):
 
 
 class P24ClientError(ClientResponseError, P24Error):
+    def __init__(self, *args, **kwargs):
+        self.json = kwargs.pop("json", None)
+        super().__init__(*args, **kwargs)
+
     @classmethod
-    def from_request(cls, req):
+    def from_request(cls, req, js):
         return cls(
             req.request_info,
             req.history,
             status=req.status,
             message=req.reason,
             headers=req.headers,
+            json=js,
+        )
+
+    def __str__(self) -> str:
+        return "{} {} on {} {} (data: {!r})".format(
+            self.status,
+            self.message,
+            self.request_info.method,
+            self.request_info.real_url,
+            self.json,
         )
 
 
