@@ -1,6 +1,5 @@
-from typing import Optional
-
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
+from typing import Optional, Dict, Union
 
 
 @dataclass
@@ -10,7 +9,7 @@ class BLIKResponse:
     error_code: Optional[int] = None
     order_id: Optional[int] = None
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Union[bool, str, int, None]]:
         return {
             "success": self.success,
             "message": self.message,

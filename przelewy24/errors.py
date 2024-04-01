@@ -1,4 +1,6 @@
-from aiohttp import ClientResponseError
+from typing import Dict, Any
+
+from aiohttp import ClientResponseError, ClientResponse
 
 
 class P24Error(Exception):
@@ -11,7 +13,7 @@ class P24ClientError(ClientResponseError, P24Error):
         super().__init__(*args, **kwargs)
 
     @classmethod
-    def from_request(cls, req, js):
+    def from_request(cls, req: ClientResponse, js: Dict[str, Any]) -> "P24ClientError":
         return cls(
             req.request_info,
             req.history,

@@ -14,8 +14,8 @@ class Channels(IntEnum):
     BLIK = 8192
     ALL_EXCEPT_BLIK = 16384
 
-    def __add__(self, other):
+    def __add__(self, other: "Channels") -> int:
         return self.value | other.value
 
-    def __sub__(self, other):
+    def __sub__(self, other: "Channels") -> int:
         return self.value & ~other.value

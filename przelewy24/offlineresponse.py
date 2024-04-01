@@ -1,4 +1,5 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
+from typing import Dict, Union
 
 
 @dataclass
@@ -11,7 +12,7 @@ class OfflineResponse:
     iban_owner: str
     iban_owner_address: str
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Union[int, str]]:
         return {
             "order_id": self.order_id,
             "session_id": self.session_id,

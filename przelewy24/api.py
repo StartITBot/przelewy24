@@ -1,19 +1,17 @@
-from pprint import pprint
-
-from decimal import Decimal
-
 import urllib.parse
 import uuid
-from aiohttp import ClientSession, BasicAuth
+from decimal import Decimal
 from typing import Optional, Union, Dict, Any, TypedDict, cast
 
-from przelewy24.blikresponse import BLIKResponse
-from przelewy24.channels import Channels
-from przelewy24.errors import P24NotAuthorizedError, P24BadRequestError
-from przelewy24.offlineresponse import OfflineResponse
-from przelewy24.transactiondataresponse import TransactionDataResponse
-from przelewy24.transactioncreateresponse import TransactionCreateResponse
-from przelewy24.utils import get_sha384_hash
+from aiohttp import ClientSession, BasicAuth
+
+from .blikresponse import BLIKResponse
+from .channels import Channels
+from .errors import P24NotAuthorizedError, P24BadRequestError
+from .offlineresponse import OfflineResponse
+from .transactioncreateresponse import TransactionCreateResponse
+from .transactiondataresponse import TransactionDataResponse
+from .utils import get_sha384_hash
 
 PRODUCTION_URL: str = "https://secure.przelewy24.pl/"
 SANDBOX_URL: str = "https://sandbox.przelewy24.pl/"
@@ -42,7 +40,7 @@ class NULL:
     pass
 
 
-def fill_null(**kwargs) -> Dict[str, Any]:
+def fill_null(**kwargs: Any) -> Dict[str, Any]:
     return {k: v for k, v in kwargs.items() if v is not NULL}
 
 
@@ -66,13 +64,13 @@ class P24:
         self.base_url = SANDBOX_URL if sandbox else PRODUCTION_URL
         self.return_url = return_url
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "P24":
         return self
 
-    async def __aexit__(self, *excinfo):
+    async def __aexit__(self, *excinfo: Any) -> None:
         await self.session.close()
 
-    async def close(self):
+    async def close(self) -> None:
         await self.session.close()
 
     # noinspection PyShadowingBuiltins
@@ -178,7 +176,7 @@ class P24:
 
     async def verify_transaction(
         self, amount: int, currency: str, *, session_id: str, order_id: int
-    ):
+    ) -> Dict[str, Any]:
         sign = get_sha384_hash(
             {
                 "sessionId": session_id,
@@ -212,7 +210,7 @@ class P24:
             js = await req.json()
             raise P24NotAuthorizedError.from_request(req, js)
 
-        return await req.json()
+        return cast(Dict[str, Any], await req.json())
 
     async def charge_blik_by_code(
         self,
@@ -223,7 +221,7 @@ class P24:
         alias_label: Optional[str] = None,
         recurring: Optional[Dict[str, Any]] = None,
     ) -> BLIKResponse:
-        json_data = {
+        json_data: Dict[str, Any] = {
             "token": token,
             "blikCode": blik_code.replace(" ", "").replace("\n", ""),
         }

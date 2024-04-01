@@ -1,17 +1,12 @@
-import json
-
 import datetime
-
-from typing import TYPE_CHECKING, Optional, Union
-
+from dataclasses import dataclass, field
 from enum import IntEnum
+from typing import TYPE_CHECKING, Optional, Union, Dict, Any
 
-from dataclasses import dataclass, field, asdict
-
-from przelewy24.paymentmethod import PaymentMethod
+from .paymentmethod import PaymentMethod
 
 if TYPE_CHECKING:
-    from przelewy24.api import P24
+    from .api import P24
 
 
 class TransactionStatus(IntEnum):
@@ -44,7 +39,8 @@ class TransactionDataResponse:
 
     _base: "Optional[P24]" = field(repr=False, hash=False, compare=False, default=None)
 
-    async def verify(self):
+    async def verify(self) -> Dict[str, Any]:
+        assert self._base is not None, "Base is not set"
         return await self._base.verify_transaction(
             self.amount,
             self.currency,
@@ -52,7 +48,7 @@ class TransactionDataResponse:
             order_id=self.order_id,
         )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """
         Post init method to convert some API fields to proper types
         """
@@ -80,7 +76,9 @@ class TransactionDataResponse:
             if PaymentMethod.exists(self.payment_method):
                 self.payment_method = PaymentMethod(self.payment_method)
 
-    def to_dict(self):
+    def to_dict(
+        self,
+    ) -> Dict[str, Union[str, int, TransactionStatus, PaymentMethod, None]]:
         return {
             "statement": self.statement,
             "order_id": self.order_id,
@@ -89,9 +87,11 @@ class TransactionDataResponse:
             "amount": self.amount,
             "currency": self.currency,
             "date": self.date.isoformat() if self.date else None,
-            "date_of_transaction": self.date_of_transaction.isoformat()
-            if self.date_of_transaction
-            else None,
+            "date_of_transaction": (
+                self.date_of_transaction.isoformat()
+                if self.date_of_transaction
+                else None
+            ),
             "client_email": self.client_email,
             "account_md5": self.account_md5,
             "payment_method": self.payment_method,
