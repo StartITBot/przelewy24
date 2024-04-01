@@ -1,7 +1,7 @@
 import urllib.parse
 import uuid
 from decimal import Decimal
-from typing import Optional, Union, Dict, Any, TypedDict, cast
+from typing import Optional, Union, Dict, Any, TypedDict, Literal
 
 from aiohttp import ClientSession, BasicAuth
 
@@ -102,6 +102,7 @@ class P24:
         cart: Dict[str, Any] = NULL,
         method_ref_id: str = NULL,
         additional: Dict[str, Any] = NULL,
+        url_card_payment_notification: str = NULL,
     ) -> TransactionCreateResponse:
         if data is None:
             data = TransactionArgs()
@@ -143,6 +144,7 @@ class P24:
                 phone=phone,
                 method=method,
                 urlStatus=url_status,
+                urlCardPaymentNotification=url_card_payment_notification,
                 timeLimit=time_limit,
                 channel=channel,
                 waitForResult=wait_for_result,
@@ -176,7 +178,7 @@ class P24:
 
     async def verify_transaction(
         self, amount: int, currency: str, *, session_id: str, order_id: int
-    ) -> Dict[str, Any]:
+    ) -> Literal[True]:
         sign = get_sha384_hash(
             {
                 "sessionId": session_id,
@@ -210,7 +212,7 @@ class P24:
             js = await req.json()
             raise P24NotAuthorizedError.from_request(req, js)
 
-        return cast(Dict[str, Any], await req.json())
+        return True
 
     async def charge_blik_by_code(
         self,

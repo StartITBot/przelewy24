@@ -1,7 +1,7 @@
 import datetime
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import TYPE_CHECKING, Optional, Union, Dict, Any
+from typing import TYPE_CHECKING, Optional, Union, Dict, Literal
 
 from .paymentmethod import PaymentMethod
 
@@ -39,7 +39,7 @@ class TransactionDataResponse:
 
     _base: "Optional[P24]" = field(repr=False, hash=False, compare=False, default=None)
 
-    async def verify(self) -> Dict[str, Any]:
+    async def verify(self) -> Literal[True]:
         assert self._base is not None, "Base is not set"
         return await self._base.verify_transaction(
             self.amount,
