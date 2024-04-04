@@ -17,25 +17,6 @@ PRODUCTION_URL: str = "https://secure.przelewy24.pl/"
 SANDBOX_URL: str = "https://sandbox.przelewy24.pl/"
 
 
-class TransactionArgs(TypedDict, total=False):
-    client: str
-    address: str
-    zip: str
-    city: str
-    phone: str
-    method: int
-    urlStatus: str
-    timeLimit: int
-    channel: Union[Channels, int]
-    waitForResult: bool
-    regulationAccept: bool
-    shipping: int
-    transferLabel: str
-    cart: Dict[str, Any]
-    methodRefId: str
-    additional: Dict[str, Any]
-
-
 class NULL:
     pass
 
@@ -85,7 +66,7 @@ class P24:
         language: str = "pl",
         return_url: Optional[str] = None,
         session_id: Optional[str] = None,
-        data: Optional[TransactionArgs] = None,
+        data: Optional[Dict[str, Any]] = None,
         client: str = NULL,
         address: str = NULL,
         zip: str = NULL,
@@ -105,7 +86,7 @@ class P24:
         url_card_payment_notification: str = NULL,
     ) -> TransactionCreateResponse:
         if data is None:
-            data = TransactionArgs()
+            data = {}
         elif data.get("channel"):
             data["channel"] = int(data["channel"])
 
